@@ -1,48 +1,83 @@
-#define MIDI_NOTE_OFF         0b10000000
-#define MIDI_NOTE_ON          0b10010000
-#define MIDI_AFTERTOUCH       0b10100000
-#define MIDI_CONT_CONTROLLER  0b10110000
-#define MIDI_PATCH_CHANGE     0b11000000
-#define MIDI_CH_PRESSURE      0b11010000
-#define MIDI_PITCH_BEND       0b11100000
-#define MIDI_NON_MUSICAL      0b11110000
+#include "songs.h"
 
-int tonos[] = {0, 11, 9, 7, 5, 4, 2, 12, 23, 21, 18, 17, 16, 14, 24, 35};
-int fotoresistores[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
-float valorFotoReceptor[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-float voltajeFotoReceptor[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-int leds[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+const byte MIDI_NOTE_OFF = 0b10000000;
+const byte MIDI_NOTE_ON = 0b10010000;
+const short STRINGS = 16;
 
-bool tocarCuerdas[] = {true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true};
+// do, si, la, sol, fa, mi, re... (and so on)
+short tones[STRINGS] = {0, 11, 9, 7, 5, 4, 2, 12, 23, 21, 19, 17, 16, 14, 24, 35};
+short photoresistors[STRINGS] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+float photoReceptorValues[STRINGS] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+float photoReceptorVoltage[STRINGS] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+short leds[STRINGS] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+
+bool playStrings[STRINGS] = {true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true};
+
+bool playDemo = false;
 
 void setup() {
-  Serial.begin(19200);
+	Serial.begin(19200);
 
-  for (int i = 0; i < 4; i++) {
-	pinMode(leds[i], OUTPUT);
-	pinMode(fotoresistores[i], INPUT);
-  }
+	for (short i = 0; i < STRINGS; i++) {
+		pinMode(leds[i], OUTPUT);
+		pinMode(photoresistors[i], INPUT);
+
+		// Turn off all the LEDs.
+		digitalWrite(leds[i], LOW);
+	}
+
+	// Switch to activate demo mode.
+	pinMode(16, INPUT);
 }
 
 void loop() {
-	for (int i = 0; i < 1; i++) {
-		if (tocarCuerdas[i]) {
-			valorFotoReceptor[i] = analogRead(fotoresistores[i]);
-			voltajeFotoReceptor[i] = valorFotoReceptor[i] * (5.0 / 1023.0);
+	if (playDemo)
+		demoMode(&demo);
+	else
+		normalMode();
+}
 
-			if (voltajeFotoReceptor[i] > 1.0) {
+void demoMode(struct Song *demo) {
+	// Abraham pls, remember we discussed about this loop.
+	// Stop all the current playing sounds.
+	for (short i = 0; i < STRINGS; i++) {
+		digitalWrite(leds[i], LOW);
+		midiMessage(MIDI_NOTE_OFF, tones[i]);
+	}
+
+	//Serial.println("Playing %s.", demo->name);
+	for (short i = 0; i < demo->size; i++) {
+		// Turn on LED, play note for X period of time.
+		digitalWrite(demo->leds[i], HIGH);
+		midiMessage(MIDI_NOTE_ON, demo->notes[i]);
+		delay(demo->play_time[i]);
+
+		// Turn off LED, stop note and wait X period of time.
+		digitalWrite(demo->leds[i], LOW);
+		midiMessage(MIDI_NOTE_OFF, demo->notes[i]);
+		delay(demo->silences[i]);
+	}
+}
+
+void normalMode() {
+	for (short i = 0; i < STRINGS; i++) {
+		if (playStrings[i]) {
+			photoReceptorValues[i] = analogRead(photoresistors[i]);
+			photoReceptorVoltage[i] = photoReceptorValues[i] * (5.0 / 1023.0);
+
+			if (photoReceptorVoltage[i] > 1.0) {
 				digitalWrite(leds[i], HIGH);
-				midiMessage(MIDI_NOTE_OFF, tonos[i]);
-				tocarCuerdas[i] = false;
+				midiMessage(MIDI_NOTE_OFF, tones[i]);
+				playStrings[i] = false;
 			}
 		} else {
-			valorFotoReceptor[i] = analogRead(fotoresistores[i]);
-			voltajeFotoReceptor[i] = valorFotoReceptor[i] * (5.0 / 1023.0);
+			photoReceptorValues[i] = analogRead(photoresistors[i]);
+			photoReceptorVoltage[i] = photoReceptorValues[i] * (5.0 / 1023.0);
 
-			if (voltajeFotoReceptor[i] < 1.0) {
+			if (photoReceptorVoltage[i] < 1.0) {
 				digitalWrite(leds[i], LOW);
-				midiMessage(MIDI_NOTE_ON, tonos[i]);
-				tocarCuerdas[i] = true;
+				midiMessage(MIDI_NOTE_ON, tones[i]);
+				playStrings[i] = true;
 			}
 		}
 	}
@@ -50,7 +85,7 @@ void loop() {
 
 /*
  * Manda un mensaje serial en formato MIDI
- * @param command Un comando MIDO
+ * @param command Un comando MIDI
  * @param MIDInote La nota para el comando anterior
  * @param MIDIvelocity (0~127) establece el volumen de la nota
 */
