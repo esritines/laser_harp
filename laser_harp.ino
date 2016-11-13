@@ -31,6 +31,8 @@ void setup() {
 }
 
 void loop() {
+	playDemo = DigitalRead(16);
+
 	if (playDemo)
 		demoMode(&demo);
 	else
@@ -61,19 +63,24 @@ void demoMode(struct Song *demo) {
 
 void normalMode() {
 	for (short i = 0; i < STRINGS; i++) {
+		// Check if laser is not interrupted.
 		if (playStrings[i]) {
+			// Read value of photoresistor and convert to voltage value.
 			photoReceptorValues[i] = analogRead(photoresistors[i]);
 			photoReceptorVoltage[i] = photoReceptorValues[i] * (5.0 / 1023.0);
 
+			// If the string is interrupted stop the MIDI note.
 			if (photoReceptorVoltage[i] > 1.0) {
 				digitalWrite(leds[i], HIGH);
 				midiMessage(MIDI_NOTE_OFF, tones[i]);
 				playStrings[i] = false;
 			}
 		} else {
+			// Read value of photoresistor and convert to voltage value.
 			photoReceptorValues[i] = analogRead(photoresistors[i]);
 			photoReceptorVoltage[i] = photoReceptorValues[i] * (5.0 / 1023.0);
 
+			// If the string is not interrupted play a MIDI note.
 			if (photoReceptorVoltage[i] < 1.0) {
 				digitalWrite(leds[i], LOW);
 				midiMessage(MIDI_NOTE_ON, tones[i]);
