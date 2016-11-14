@@ -31,7 +31,7 @@ void setup() {
 }
 
 void loop() {
-	playDemo = DigitalRead(16);
+	playDemo = digitalRead(16);
 
 	if (playDemo)
 		demoMode(&demo);
